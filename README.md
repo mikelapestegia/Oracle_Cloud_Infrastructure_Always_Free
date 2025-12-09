@@ -205,7 +205,7 @@ curl -sfL https://get.k3s.io | K3S_URL=https://<CONTROL_PLANE_IP>:6443 \
 
 ```bash
 # Copiar kubeconfig desde el control plane
-scp ubuntu@<CONTROL_PLANE_IP>:/etc/rancher/k3s/k3s.yaml ~/.kube/config
+scp opc@<CONTROL_PLANE_IP>:/etc/rancher/k3s/k3s.yaml ~/.kube/config
 
 # Editar la IP del servidor
 sed -i 's/127.0.0.1/<CONTROL_PLANE_IP>/g' ~/.kube/config
@@ -364,9 +364,7 @@ curl http://<PUBLIC_IP>:30080/
 |-------------|---------|----------|
 | Oracle Cloud Infrastructure | Always Free | Proveedor de infraestructura |
 | k3s | v1.28+ | Distribución ligera de Kubernetes |
-| Ubuntu | 22.04 LTS | Sistema operativo base |
-
-### Networking & Ingress
+| Oracle Linux | 9.6 | Sistema operativo base |
 
 | Tecnología | Versión | Propósito |
 |-------------|---------|----------|
