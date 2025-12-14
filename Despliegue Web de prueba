@@ -1,0 +1,140 @@
+# 🚀 Guía de Despliegue Web de prueba e Infraestructura: Oracle Cloud
+
+Este documento detalla el procedimiento para configurar el acceso seguro mediante SSH, la configuración del servidor en Oracle Linux y el flujo de despliegue manual para la aplicación web.
+
+**Infraestructura:** Oracle Cloud Infrastructure (OCI) - Always Free Tier  
+**OS:** Oracle Linux 8/9  
+**Arquitectura Web:** Vite/React (SPA) servido por Nginx
+
+---
+
+## 🔑 1. Gestión de Llaves y Acceso Seguro (Remmina)
+
+Para evitar el uso de contraseñas y maximizar la seguridad, utilizamos pares de llaves SSH generadas por Oracle Cloud.
+
+### 1.1 Preparación de llaves locales
+Las llaves privadas (`.key`) descargadas deben moverse a una ubicación segura y tener los permisos restrictivos adecuados para que SSH las acepte.
+
+```bash
+# 1. Mover llaves a la carpeta oculta .ssh
+mv ~/Downloads/ssh-key-worker.key ~/.ssh/oracle_worker.key
+
+# 2. Blindar la llave (Permisos 600: Solo yo puedo leer/escribir)
+chmod 600 ~/.ssh/oracle_worker.key
+
+```
+
+###1.2 Configuración de Cliente SSH (Remmina)Configuración para acceso remoto visual y consola.
+
+| Parámetro | Valor Configurado |
+| --- | --- |
+| **Protocolo** | SSH - Secure Shell |
+| **Servidor** | `<IP_PUBLICA_DEL_SERVIDOR>` |
+| **Usuario** | `opc` (Usuario por defecto en Oracle Linux) |
+| **Auth Type** | Archivo de Identidad (Identity File) |
+| **Certificado** | `~/.ssh/oracle_worker.key` |
+
+> ⚠️ **Nota:** No usar contraseña. La autenticación es puramente criptográfica.
+
+---
+
+##🛠️ 2. Preparación del Servidor (Oracle Linux)Oracle Linux requiere pasos adicionales de seguridad comparado con Debian/Ubuntu, específicamente para el Firewall y SELinux.
+
+###2.1 Instalación de Nginx y Firewall```bash
+# Instalación de servidor web
+sudo dnf install nginx -y
+sudo systemctl enable --now nginx
+
+# Apertura de puertos en FirewallD (Firewall interno del OS)
+sudo systemctl enable --now firewalld
+sudo firewall-cmd --permanent --zone=public --add-service=http
+sudo firewall-cmd --reload
+
+```
+
+###2.2 Estructura de DirectoriosPreparamos la carpeta donde vivirá la web y asignamos permisos al usuario de despliegue (`opc`).
+
+```bash
+sudo mkdir -p /var/www/mi-proyecto
+sudo chown -R opc:opc /var/www/mi-proyecto
+
+```
+
+---
+
+##📦 3. Flujo de Despliegue (Deploy)El despliegue sigue la estrategia **"Build Local, Run Cloud"**. Compilamos en la máquina de desarrollo para ahorrar recursos en el servidor.
+
+###3.1 Compilación LocalEn el equipo de desarrollo:
+
+```bash
+npm install
+npm run build
+# Esto genera la carpeta /dist optimizada
+
+```
+
+###3.2 Subida de Artefactos (SCP)Enviamos los archivos compilados al servidor de forma segura:
+
+```bash
+scp -i ~/.ssh/oracle_worker.key -r dist/* opc@<IP_DEL_SERVIDOR>:/var/www/mi-proyecto/
+
+```
+
+###3.3 Configuración de Nginx (SPA)Archivo: `/etc/nginx/conf.d/mi-proyecto.conf`
+
+```nginx
+server {
+    listen 80;
+    server_name _;
+
+    root /var/www/mi-proyecto;
+    index index.html;
+
+    # Configuración vital para SPAs (React/Vue)
+    # Evita errores 404 al recargar rutas internas
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Logs
+    error_log /var/log/nginx/project_error.log;
+    access_log /var/log/nginx/project_access.log;
+}
+
+```
+
+---
+
+##🛡️ 4. Seguridad Crítica (SELinux & Cloud Firewall)Para que la web sea accesible, es necesario realizar dos pasos finales específicos de la infraestructura Oracle.
+
+###4.1 Configuración SELinuxOracle Linux tiene SELinux en modo `enforcing` por defecto. Si no etiquetamos los archivos, Nginx no podrá leerlos (Error 403).
+
+```bash
+# Etiquetar la carpeta como contenido web
+sudo chcon -R -t httpd_sys_content_t /var/www/mi-proyecto
+
+# Asignar propiedad final a Nginx
+sudo chown -R nginx:nginx /var/www/mi-proyecto
+sudo chmod -R 755 /var/www/mi-proyecto
+
+# Reiniciar servicio
+sudo systemctl restart nginx
+
+```
+
+###4.2 Oracle Cloud Security List (VCN)Además del firewall del servidor, se debe abrir el puerto en la consola web de Oracle:
+
+1. Ir a **VCN** > **Security Lists**.
+2. Añadir **Ingress Rule**:
+* **Source:** `0.0.0.0/0` (Cualquier origen)
+* **Protocol:** TCP
+* **Port:** 80
+
+
+
+---
+
+##✅ Estado ActualEl servidor está configurado para servir la aplicación estática en el puerto 80. Cualquier actualización futura solo requiere repetir el paso **3.1** y **3.2**.
+
+
+```
